@@ -16,6 +16,7 @@
 スクショ時にファイル URL のテキストも同時に保存します。
 
 <img width="836" height="365" alt="スクリーンショット 2025-09-22 085128" src="https://github.com/user-attachments/assets/2d26bfd6-0546-436a-9a31-ef127932494a" />
+
 ※位置情報を入れるは今はチェック入れないでください
 
 **キャンセル**
