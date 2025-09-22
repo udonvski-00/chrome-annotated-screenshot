@@ -1,0 +1,35 @@
+name: Release ZIP
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'   # 例: v1.0.0 で発火
+
+permissions:
+  contents: write   # Release作成・アップロードに必要（PrivateでもOK）
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Make ZIP from tag with clean prefix
+        run: |
+          REPO=$(basename $GITHUB_REPOSITORY)
+          VER=${GITHUB_REF_NAME}
+          git archive --format=zip \
+            --output="${REPO}-${VER}.zip" \
+            --prefix="${REPO}/" \
+            "${VER}"
+          ls -lh
+
+      - name: Create/Update GitHub Release & Upload ZIP
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: ${{ github.workspace }}/*.zip
+          generate_release_notes: true
