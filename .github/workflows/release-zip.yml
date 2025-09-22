@@ -23,7 +23,6 @@ jobs:
           VER=${GITHUB_REF_NAME}
           git archive --format=zip \
             --output="${REPO}-${VER}.zip" \
-            --prefix="${REPO}/" \
             "${VER}"
           ls -lh
 
