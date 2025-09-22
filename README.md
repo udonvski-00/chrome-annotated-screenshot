@@ -1,4 +1,4 @@
-<img width="1349" height="609" alt="スクリーンショット 2025-09-22 093605" src="https://github.com/user-attachments/assets/de62ccd3-0fca-4c15-b4d1-3b52068d4b71" />﻿# ファイル名スクショにつける君
+﻿# ファイル名スクショにつける君
 
 「ファ君」って呼んでね。
 画像 URL 注釈付きスクリーンショット（Chrome 拡張機能）です。
