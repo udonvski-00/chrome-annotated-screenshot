@@ -1,13 +1,18 @@
-﻿# ファイル名スクショにつける君
+<img width="1349" height="609" alt="スクリーンショット 2025-09-22 093605" src="https://github.com/user-attachments/assets/de62ccd3-0fca-4c15-b4d1-3b52068d4b71" />﻿# ファイル名スクショにつける君
 
 「ファ君」って呼んでね。
 画像 URL 注釈付きスクリーンショット（Chrome 拡張機能）です。
 
 **準備**
-- このページの 1:code をクリック。出てきたプルダウンから２：Download ZIPをクリック。
-- 任意の場所に解凍。
+- このページの Release をクリック。
+<img width="1349" height="609" alt="スクリーンショット 2025-09-22 093605" src="https://github.com/user-attachments/assets/6b8020e2-c351-4824-b17f-490856c7ed95" />
 
-  <img width="938" height="459" alt="スクリーンショット 2025-09-22 090422" src="https://github.com/user-attachments/assets/6c5545d2-84c1-49d2-abd2-9356c9c352fb" />
+一番上のzipをクリックでDL
+
+<img width="1185" height="483" alt="スクリーンショット 2025-09-22 093616" src="https://github.com/user-attachments/assets/6ea6e6c7-9e9c-42b6-a280-5e1e6225214b" />
+
+
+- 任意の場所に解凍。
 
 
 **クイックスタート**
