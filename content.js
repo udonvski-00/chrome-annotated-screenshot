@@ -358,9 +358,9 @@
         return b;
       };
 
-      const bFull = btn('ページ全体（画像＋テキスト）');
+      const bFull = btn('ページ全体（画像＋テキスト） Ctrl+Shift+1');
       bFull.style.background = '#00b894';
-      const bSelection = btn('選択範囲スクロール');
+      const bSelection = btn('選択範囲スクロール Ctrl+Shift+2');
       bSelection.style.background = '#ff7675';
 
       const optWrap = document.createElement('div');

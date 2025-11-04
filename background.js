@@ -13,6 +13,7 @@ const VIEWPORT_TARGET_WIDTH_PX = 1000; // target width for viewport captures (px
 // Target width for FULL-PAGE PNG export (final output width)
 const FULLPAGE_TARGET_WIDTH_PX = 1000; // target width for full-page captures (px)
 let __lastCapAt = 0;
+let forcedCaptureConfig = null;
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg && msg.type === 'IMGURL_CANCEL') {
@@ -23,12 +24,20 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   return false;
 });
 
-  chrome.action.onClicked.addListener(async (tab) => {
+async function runCapture(tab) {
     try {
       if (!tab || !tab.id || tab.status !== 'complete') return;
+      try {
+        await chrome.tabs.get(tab.id);
+      } catch (err) {
+        return;
+      }
+      if (tab.url && /^chrome:\/\//i.test(tab.url)) return;
       cancelRequested = false;
       const tabId = tab.id;
       const windowId = tab.windowId;
+      const forced = forcedCaptureConfig;
+      forcedCaptureConfig = null;
 
     // Ensure annotator is present and ESC watcher enabled in all frames
     try {
@@ -40,31 +49,33 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
     /* if (DEBUG) console.log('[IMGURL] Start capture', { tabId }); */
     // Ask user the export mode (viewport or full image+text)
-    let exportMode = 'image_txt';
-    let includePos = false; // whether to include position info in TXT
-    try {
-      const res = await chrome.scripting.executeScript({
-        target: { tabId: tabId },
-        func: async () => {
-          try {
-            const annotator = window.__imgurl_annotator;
-            if (!annotator || typeof annotator.showModeChooser !== 'function') return 'image_txt';
-            return await annotator.showModeChooser();
-          } catch (err) {
-            return 'image_txt';
+    let exportMode = forced && forced.mode ? forced.mode : 'image_txt';
+    let includePos = forced ? !!forced.includePos : false; // whether to include position info in TXT
+    if (!forced) {
+      try {
+        const res = await chrome.scripting.executeScript({
+          target: { tabId: tabId },
+          func: async () => {
+            try {
+              const annotator = window.__imgurl_annotator;
+              if (!annotator || typeof annotator.showModeChooser !== 'function') return 'image_txt';
+              return await annotator.showModeChooser();
+            } catch (err) {
+              return 'image_txt';
+            }
+          }
+        });
+        if (Array.isArray(res) && res[0] && typeof res[0].result !== 'undefined') {
+          const v = res[0].result;
+          if (v && typeof v === 'object') {
+            exportMode = v.mode || 'image_txt';
+            includePos = !!v.includePos;
+          } else {
+            exportMode = v;
           }
         }
-      });
-      if (Array.isArray(res) && res[0] && typeof res[0].result !== 'undefined') {
-        const v = res[0].result;
-        if (v && typeof v === 'object') {
-          exportMode = v.mode || 'image_txt';
-          includePos = !!v.includePos;
-        } else {
-          exportMode = v;
-        }
-      }
-    } catch (err) {}
+      } catch (err) {}
+    }
     if (exportMode === null || typeof exportMode === 'undefined') return;
     if (exportMode === 'pdf') exportMode = 'image_txt';
     const isSelectionScrollMode = (exportMode === 'beta_selection_scroll');
@@ -126,7 +137,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       try {
         await chrome.scripting.executeScript({
           target: { tabId: tabId },
-          func: () => { try { window.__imgurl_annotator && window.__imgurl_annotator.setProgressOverlay('Drag to select an area'); window.__imgurl_annotator && window.__imgurl_annotator.setProgressVisibility(true); } catch (err) {} }
+          func: () => { try { window.__imgurl_annotator && window.__imgurl_annotator.setProgressOverlay('範囲をドラッグして選択してください'); window.__imgurl_annotator && window.__imgurl_annotator.setProgressVisibility(true); } catch (err) {} }
         });
       } catch (err) {}
       try {
@@ -633,6 +644,23 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     }
     cancelRequested = false;
   }
+}
+
+chrome.action.onClicked.addListener((tab) => { runCapture(tab); });
+
+chrome.commands.onCommand.addListener(async (command) => {
+  if (command !== 'capture_full_page' && command !== 'capture_selection') return;
+  const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+  if (!tab || !tab.id || tab.status !== 'complete') return;
+  if (tab.url && /^chrome:\/\//i.test(tab.url)) return;
+  if (command === 'capture_full_page') {
+    forcedCaptureConfig = { mode: 'image_txt', includePos: false };
+  } else if (command === 'capture_selection') {
+    forcedCaptureConfig = { mode: 'viewport_image_txt', includePos: false };
+  } else {
+    return;
+  }
+  await runCapture(tab);
 });
 
 let collectedLabels = [];

@@ -6,6 +6,20 @@
   "action": {
     "default_title": "Capture with URL labels"
   },
+  "commands": {
+    "capture_full_page": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+1"
+      },
+      "description": "ページ全体をキャプチャして URL ラベル付きで保存"
+    },
+    "capture_selection": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+2"
+      },
+      "description": "選択範囲をキャプチャして URL ラベル付きで保存"
+    }
+  },
   "background": {
     "service_worker": "background.js"
   },
