@@ -297,11 +297,10 @@
   // Simple chooser UI to select export mode at start
   function showModeChooser() {
     return new Promise((resolve) => {
-      // If already present, remove and recreate (fresh)
       try {
         const old = document.querySelector('.__imgurl_modechooser__');
         if (old) old.remove();
-      } catch {}
+      } catch (err) {}
 
       const wrap = document.createElement('div');
       wrap.className = '__imgurl_modechooser__';
@@ -318,6 +317,7 @@
         justifyContent: 'center',
         backdropFilter: 'blur(1.5px)'
       });
+
       const box = document.createElement('div');
       Object.assign(box.style, {
         background: '#111',
@@ -326,17 +326,20 @@
         borderRadius: '12px',
         boxShadow: '0 6px 18px rgba(0,0,0,.5)',
         minWidth: '260px',
-        font: '14px/1.45 -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, "Noto Sans JP", sans-serif',
+        font: '14px/1.45 -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, "Noto Sans JP", sans-serif'
       });
+
       const title = document.createElement('div');
-      title.textContent = '出力形式を選択';
+      title.textContent = '出力形式を選んでください';
       title.style.fontWeight = '600';
       title.style.marginBottom = '10px';
       title.style.color = '#fff';
+
       const row = document.createElement('div');
       row.style.display = 'flex';
       row.style.gap = '10px';
       row.style.marginTop = '6px';
+
       const btn = (label) => {
         const b = document.createElement('button');
         b.textContent = label;
@@ -355,14 +358,11 @@
         return b;
       };
 
-      const bImg = btn('ページ全体（画像 + テキスト）');
-      bImg.style.background = '#00b894';
-      const bBelow = btn('現在位置から下（画像 + テキスト）');
-      bBelow.style.background = '#af7913ff';
-      const bView = btn('表示部分（画像 + テキスト）');
-      bView.style.background = '#6c5ce7';
+      const bFull = btn('ページ全体（画像＋テキスト）');
+      bFull.style.background = '#00b894';
+      const bSelection = btn('選択範囲スクロール');
+      bSelection.style.background = '#ff7675';
 
-      // Option checkbox: include position info in TXT (default: off)
       const optWrap = document.createElement('div');
       optWrap.style.marginTop = '10px';
       optWrap.style.display = 'flex';
@@ -372,38 +372,36 @@
       chk.id = '__imgurl_opt_pos__';
       chk.checked = false;
       const lab = document.createElement('label');
-      lab.textContent = '位置情報を入れる';
+      lab.textContent = '位置情報を含める';
       lab.setAttribute('for', chk.id);
       lab.style.marginLeft = '6px';
       lab.style.color = '#fff';
 
-      const finish = (mode) => {
-        try { wrap.remove(); } catch {}
-        // Return object for richer options; stay backward-friendly in background
-        resolve({ mode, includePos: !!chk.checked });
+      const cleanup = () => {
+        try { document.removeEventListener('keydown', onKey, true); } catch (err) {}
       };
 
-      bImg.addEventListener('click', () => finish('image_txt'));
-      bBelow.addEventListener('click', () => finish('below_image_txt'));
-      bView.addEventListener('click', () => finish('viewport_image_txt'));
+      const finish = (mode) => {
+        cleanup();
+        try { wrap.remove(); } catch (err) {}
+        resolve(mode === null ? null : { mode, includePos: !!chk.checked });
+      };
 
-      // ESC closes chooser with default 'image_txt'
       const onKey = (e) => {
         if (e.key === 'Escape' || e.code === 'Escape' || e.keyCode === 27) {
-          cleanup();
-          finish('image_txt');
+          e.preventDefault();
+          finish(null);
         }
-      };
-      const cleanup = () => {
-        try { document.removeEventListener('keydown', onKey, true); } catch {}
       };
       document.addEventListener('keydown', onKey, true);
 
+      bFull.addEventListener('click', () => finish('image_txt'));
+      bSelection.addEventListener('click', () => finish('beta_selection_scroll'));
+
       box.appendChild(title);
+      row.appendChild(bFull);
+      row.appendChild(bSelection);
       box.appendChild(row);
-      row.appendChild(bImg);
-      row.appendChild(bBelow);
-      row.appendChild(bView);
       optWrap.appendChild(chk);
       optWrap.appendChild(lab);
       box.appendChild(optWrap);
@@ -412,6 +410,185 @@
     });
   }
 
+  function selectAreaOnce() {
+    const EDGE_MARGIN_PX = 48;
+    const AUTO_SCROLL_STEP = 32;
+
+    return new Promise((resolve) => {
+      let finished = false;
+      let selecting = false;
+      let startPageX = 0;
+      let startPageY = 0;
+      let currentPageX = 0;
+      let currentPageY = 0;
+      let lastClientX = 0;
+      let lastClientY = 0;
+      let autoScrollDir = 0;
+      let autoScrollRaf = null;
+
+      const cleanup = (result) => {
+        if (finished) return;
+        finished = true;
+        stopAutoScroll();
+        try { document.removeEventListener('keydown', onKeyDown, true); } catch (err) {}
+        try { overlay.remove(); } catch (err) {}
+        try { outline && outline.remove(); } catch (err) {}
+        resolve(result || null);
+      };
+
+      const overlay = document.createElement('div');
+      overlay.className = '__imgurl_select_overlay__';
+      Object.assign(overlay.style, {
+        position: 'fixed',
+        inset: '0',
+        zIndex: '2147483647',
+        cursor: 'crosshair',
+        background: 'rgba(0,0,0,0.02)',
+        userSelect: 'none'
+      });
+
+      const outline = document.createElement('div');
+      Object.assign(outline.style, {
+        position: 'absolute',
+        border: '2px solid #1a73e8',
+        background: 'rgba(26,115,232,0.15)',
+        pointerEvents: 'none',
+        display: 'none'
+      });
+      overlay.appendChild(outline);
+      document.documentElement.appendChild(overlay);
+
+      const onKeyDown = (e) => {
+        if (e && (e.key === 'Escape' || e.key === 'Esc' || e.keyCode === 27)) {
+          e.preventDefault();
+          cleanup(null);
+        }
+      };
+      document.addEventListener('keydown', onKeyDown, true);
+
+      const updateOutline = () => {
+        const startClientX = startPageX - window.scrollX;
+        const startClientY = startPageY - window.scrollY;
+        const currentClientX = currentPageX - window.scrollX;
+        const currentClientY = currentPageY - window.scrollY;
+        const minX = Math.min(startClientX, currentClientX);
+        const minY = Math.min(startClientY, currentClientY);
+        const width = Math.max(1, Math.abs(currentClientX - startClientX));
+        const height = Math.max(1, Math.abs(currentClientY - startClientY));
+        outline.style.display = 'block';
+        outline.style.left = `${minX}px`;
+        outline.style.top = `${minY}px`;
+        outline.style.width = `${width}px`;
+        outline.style.height = `${height}px`;
+      };
+
+      const ensureAutoScroll = () => {
+        if (autoScrollDir === 0 || autoScrollRaf) return;
+        const step = () => {
+          if (!autoScrollDir) {
+            autoScrollRaf = null;
+            return;
+          }
+          const before = window.scrollY;
+          window.scrollBy({ top: autoScrollDir * AUTO_SCROLL_STEP, behavior: 'auto' });
+          const delta = window.scrollY - before;
+          if (delta !== 0) {
+            currentPageY += delta;
+            updateOutline();
+          } else {
+            autoScrollDir = 0;
+          }
+          autoScrollRaf = requestAnimationFrame(step);
+        };
+        autoScrollRaf = requestAnimationFrame(step);
+      };
+
+      const stopAutoScroll = () => {
+        autoScrollDir = 0;
+        if (autoScrollRaf) {
+          cancelAnimationFrame(autoScrollRaf);
+          autoScrollRaf = null;
+        }
+      };
+
+      const updateAutoScrollDirection = (clientY) => {
+        let dir = 0;
+        if (clientY > (window.innerHeight - EDGE_MARGIN_PX)) dir = 1;
+        else if (clientY < EDGE_MARGIN_PX) dir = -1;
+        if (dir !== autoScrollDir) {
+          autoScrollDir = dir;
+          if (dir === 0) stopAutoScroll();
+          else ensureAutoScroll();
+        }
+      };
+
+      overlay.addEventListener('pointerdown', (ev) => {
+        if (ev.button !== 0) {
+          ev.preventDefault();
+          return;
+        }
+        selecting = true;
+        lastClientX = ev.clientX;
+        lastClientY = ev.clientY;
+        startPageX = window.scrollX + ev.clientX;
+        startPageY = window.scrollY + ev.clientY;
+        currentPageX = startPageX;
+        currentPageY = startPageY;
+        updateOutline();
+        try { overlay.setPointerCapture(ev.pointerId); } catch (err) {}
+        ev.preventDefault();
+      }, { passive: false });
+
+      overlay.addEventListener('pointermove', (ev) => {
+        if (!selecting) return;
+        lastClientX = ev.clientX;
+        lastClientY = ev.clientY;
+        currentPageX = window.scrollX + lastClientX;
+        currentPageY = window.scrollY + lastClientY;
+        updateOutline();
+        updateAutoScrollDirection(lastClientY);
+        ev.preventDefault();
+      }, { passive: false });
+
+      const finishSelection = () => {
+        stopAutoScroll();
+        if (!selecting) return;
+        selecting = false;
+        const pageLeft = Math.min(startPageX, currentPageX);
+        const pageTop = Math.min(startPageY, currentPageY);
+        const pageWidth = Math.max(1, Math.abs(currentPageX - startPageX));
+        const pageHeight = Math.max(1, Math.abs(currentPageY - startPageY));
+        const viewportRect = outline.getBoundingClientRect();
+        cleanup({
+          viewport: {
+            left: viewportRect.left,
+            top: viewportRect.top,
+            width: viewportRect.width,
+            height: viewportRect.height
+          },
+          page: {
+            left: pageLeft,
+            top: pageTop,
+            width: pageWidth,
+            height: pageHeight
+          },
+          devicePixelRatio: window.devicePixelRatio || 1
+        });
+      };
+
+      overlay.addEventListener('pointerup', (ev) => {
+        try { overlay.releasePointerCapture(ev.pointerId); } catch (err) {}
+        finishSelection();
+      }, { passive: false });
+
+      overlay.addEventListener('pointercancel', (ev) => {
+        try { overlay.releasePointerCapture(ev.pointerId); } catch (err) {}
+        stopAutoScroll();
+        selecting = false;
+        cleanup(null);
+      }, { passive: false });
+    });
+  }
   async function annotateAndFlush(opts = {}) {
     try { annotateImages(opts); } catch {}
     await waitForPaint(2, opts.settleDelay || 120);
@@ -486,7 +663,7 @@
     spin.style.animation = 'imgurl_spin 1s linear infinite';
     const text = document.createElement('span');
     text.className = 'txt';
-    text.textContent = '準備中…';
+    text.textContent = '貅門ｙ荳ｭ窶ｦ';
     try { text.style.color = '#fff'; } catch {}
     div.appendChild(spin);
     div.appendChild(text);
@@ -543,6 +720,6 @@
     prepareForCapture,
     restoreAfterCapture,
     showModeChooser,
-    
+    selectAreaOnce,
   };
 })();

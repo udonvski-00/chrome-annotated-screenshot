@@ -1,7 +1,7 @@
-{
+﻿{
   "manifest_version": 3,
   "name": "ファイル名スクショにつける君",
-  "version": "0.2.0",
+  "version": "2.0.0",
   "description": "html内にある画像・動画のファイル名をのせたスクショをとるよ。escで止まるよ",
   "action": {
     "default_title": "Capture with URL labels"
